@@ -3,6 +3,7 @@ import java.awt.*;
 
 public class Tile extends Rectangle {
   protected int _x, _y, _size;
+  protected boolean _revealed;
   protected Color _color;
 
   public Tile(int x, int y, int size, Color color) {
@@ -10,7 +11,13 @@ public class Tile extends Rectangle {
     this._x = x;
     this._y = y;
     this._size = size;
+    this._revealed = false;
     this._color = color;
+  }
+
+  public void reveal() {
+    this._color = Color.WHITE;
+    this._revealed = true;
   }
 }
   

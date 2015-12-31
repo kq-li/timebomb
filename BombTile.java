@@ -8,4 +8,8 @@ public class BombTile extends Tile {
     super(x, y, size, Color.RED);
     this._id = id;
   }
+
+  public void reveal() {
+    super.reveal();
+  }
 }
