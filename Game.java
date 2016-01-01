@@ -57,8 +57,10 @@ public class Game extends JPanel implements MouseListener, MouseMotionListener {
     for (int x = 0; x < this._maxX; x++) {
       for (int y = 0; y < this._maxY; y++) {
         if (this._tiles[x][y] == null) {
-          this._tiles[x][y] = new SafeTile(this.toCanvasCoord(x), this.toCanvasCoord(y),
-                                           this._tileSize);
+          this._tiles[x][y] = new SafeTile(this.toCanvasCoord(x),
+                                       this.toCanvasCoord(y),
+                                       this._tileSize,
+                                       this.getClosestBombDist(x, y));
         }
       }
     }
@@ -108,10 +110,41 @@ public class Game extends JPanel implements MouseListener, MouseMotionListener {
     return bombs.toArray(new BombTile[bombs.size()]);
   }
 
+  public Tile[] getTilesInRadius(int x, int y, int r) {
+    Tile[] neighbors = getNeighbors(x, y);
+    if (r == 0) {
+      return new Tile[0];
+    } else {
+      ArrayList<Tile> tiles = new ArrayList<Tile>(Arrays.asList(neighbors));
+
+      for (Tile neighbor : neighbors)
+        tiles.addAll(Arrays.asList(getTilesInRadius(this.toTileCoord(neighbor._x),
+                                                    this.toTileCoord(neighbor._y),
+                                                    r - 1)));
+
+      return tiles.toArray(new Tile[tiles.size()]);
+    }
+  }
+
+  public Tile[] getNeighbors(int x, int y) {
+    ArrayList<Tile> tiles = new ArrayList<Tile>();
+
+    if (x > 0)
+      tiles.add(this._tiles[x - 1][y]);
+    if (x < this._maxX - 1)
+      tiles.add(this._tiles[x + 1][y]);
+    if (y > 0)
+      tiles.add(this._tiles[x][y - 1]);
+    if (y < this._maxY - 1)
+      tiles.add(this._tiles[x][y + 1]);
+
+    return tiles.toArray(new Tile[tiles.size()]);
+  }      
+  
   public int getManhattanDistance(int x1, int y1, int x2, int y2) {
     return Math.abs(x1 - x2) + Math.abs(y1 - y2);
   }
-  
+
   public Dimension getPreferredSize() {
     return new Dimension(this._frameWidth, this._frameHeight);
   }
@@ -123,15 +156,27 @@ public class Game extends JPanel implements MouseListener, MouseMotionListener {
       for (int y = 0; y < this._maxY; y++) {
         Tile tile = this._tiles[x][y];
         if (tile._revealed) {
-          g2.setFont(this._font);
-          g2.setColor(Color.BLACK);
-          String out = "" + this.getClosestBombDist(this.toTileCoord(tile._x),
-                                                    this.toTileCoord(tile._y));
-          FontMetrics fm = g2.getFontMetrics();
-          Rectangle2D r = fm.getStringBounds(out, g2);
-          g2.drawString(out, 
-                        tile._x + (this._tileSize - (int) r.getWidth()) / 2, 
-                        tile._y + (this._tileSize - (int) r.getHeight()) / 2 + fm.getAscent());
+          if (tile instanceof SafeTile) {
+            SafeTile safe = (SafeTile) tile;
+            String dist = "" + safe._dist;
+            g2.setFont(this._font);
+            g2.setColor(Color.BLACK);
+            FontMetrics fm = g2.getFontMetrics();
+            Rectangle2D r = fm.getStringBounds(dist, g2);
+            g2.drawString(dist,
+                          safe._x + (this._tileSize - (int) r.getWidth()) / 2, 
+                          safe._y + (this._tileSize - (int) r.getHeight()) / 2 + fm.getAscent());
+          } else {
+            BombTile bomb = (BombTile) tile;
+            String id = "" + bomb._id;
+            g2.setFont(this._font);
+            g2.setColor(Color.RED);
+            FontMetrics fm = g2.getFontMetrics();
+            Rectangle2D r = fm.getStringBounds(id, g2);
+            g2.drawString(id,
+                          bomb._x + (this._tileSize - (int) r.getWidth()) / 2,
+                          bomb._y + (this._tileSize - (int) r.getHeight()) / 2 + fm.getAscent());
+          }
         } else {
           g2.setColor(tile._color);
           g2.fill(tile);
@@ -146,20 +191,36 @@ public class Game extends JPanel implements MouseListener, MouseMotionListener {
   }
 
   public void mousePressed(MouseEvent e) {
-    if (SwingUtilities.isLeftMouseButton(e)) {
+    if (this._currentTile != null) {
+      this._currentTile.unhover();
+      this._currentTile = null;
+    } else {
       int tileX = this.toTileCoord(e.getX());
       int tileY = this.toTileCoord(e.getY());
       this._currentTile = this._tiles[tileX][tileY];
       this._currentTile.hover();
-      this.repaint();
     }
+    this.repaint();
   }
 
   public void mouseReleased(MouseEvent e) {
-    if (this._currentTile != null && SwingUtilities.isLeftMouseButton(e)) {
-      int tileX = this.toTileCoord(e.getX());
-      int tileY = this.toTileCoord(e.getY());
-      this._currentTile.reveal();
+    if (this._currentTile != null) {
+      if (SwingUtilities.isLeftMouseButton(e)) {
+        if (this._currentTile instanceof BombTile) {
+          for (BombTile bomb : this._bombs)
+            bomb.reveal();
+        } else if (this._currentTile._revealed) {
+          Tile[] notBombs = this.getTilesInRadius(this.toTileCoord(this._currentTile._x),
+                                                   this.toTileCoord(this._currentTile._y),
+                                                   ((SafeTile) this._currentTile)._dist - 1);
+          for (Tile notBomb : notBombs)
+            notBomb.reveal();
+        } else {
+          this._currentTile.reveal();
+        }
+      } else if (SwingUtilities.isRightMouseButton(e)) {
+        this._currentTile.toggleMark();
+      }
       this._currentTile = null;
       this.repaint();
     }
@@ -169,18 +230,12 @@ public class Game extends JPanel implements MouseListener, MouseMotionListener {
 
   public void mouseExited(MouseEvent e) {}
 
-  public void mouseClicked(MouseEvent e) {
-    if (this._currentTile != null && SwingUtilities.isRightMouseButton(e)) {
-      this._currentTile.unhover();
-      this._currentTile = null;
-      this.repaint();
-    }
-  }
+  public void mouseClicked(MouseEvent e) {}
 
   public void mouseMoved(MouseEvent e) {}
 
   public void mouseDragged(MouseEvent e) {
-    if (this._currentTile != null && SwingUtilities.isLeftMouseButton(e)) {
+    if (this._currentTile != null) {
       int tileX = this.toTileCoord(e.getX());
       int tileY = this.toTileCoord(e.getY());
       Tile hovered = this._tiles[tileX][tileY];

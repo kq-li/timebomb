@@ -5,7 +5,7 @@ public class BombTile extends Tile {
   protected int _id, _time;
 
   public BombTile(int x, int y, int size, int id) {
-    super(x, y, size, Color.RED);
+    super(x, y, size);
     this._id = id;
   }
 }
